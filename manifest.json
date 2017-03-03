@@ -1,0 +1,22 @@
+{
+  "manifest_version": 2,
+  "name": "Text To Speech",
+  "short_name": "TTS",
+  "description": "Uses Watson to read selected text",
+  "version": "0.0.1",
+  "minimum_chrome_version": "38",
+  "permissions": [
+    "contextMenus", 
+    "tabs",
+	"https://stream.watsonplatform.net/",
+	"https://gateway.watsonplatform.net/"],
+  "icons": {
+    // Icon source: https://www.onlinewebfonts.com/icon/35250
+    "16" : "resources/tts.png",
+	"48" : "resources/tts.png",
+	"128" : "resources/tts.png"
+  },
+  "background": {
+	"page": "background.html"
+  }
+}

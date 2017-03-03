@@ -77,20 +77,26 @@ function textToSpeech(data) {
 	}
 	// Translate input from given language to english and read input in english.
 	function translateAndReadInput(options, errorCallback) {
-		options.cred = transCred;
-		translateLanguage(options, function (newInput) {
-			var voice = audioTypes[1].voice;
-			options.input = newInput;
-			options.voice = voice;
-			readInput(options, errorCallback);
-		}, function (error) {
-			if (error === "NOT_FOUND") {
-				identifyAndReadInput(options, verifyAndReadInput, errorCallback);
-			}
-			else {
-				errorCallback(error);
-			}
-		});
+		// No need to translate. Already in english.
+		if (options.srcLanguage === "en") {
+			verifyAndReadInput(options, errorCallback);
+		}
+		else {
+			options.cred = transCred;
+			translateLanguage(options, function (newInput) {
+				var voice = audioTypes[1].voice;
+				options.input = newInput;
+				options.voice = voice;
+				readInput(options, errorCallback);
+			}, function (error) {
+				if (error === "NOT_FOUND") {
+					identifyAndReadInput(options, verifyAndReadInput, errorCallback);
+				}
+				else {
+					errorCallback(error);
+				}
+			});
+		}
 	}
 	// Read input in text's language.
 	if (data.menuItemId === "tts_read") {

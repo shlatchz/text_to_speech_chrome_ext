@@ -11,6 +11,7 @@ var apis = {
 				mainURI: "gateway.watsonplatform.net/language-translator/api/v2/"
 			  },
 			};
+// Identified language must have confidence above threshold.
 var confidenceThresh = 0.8;
 // Supported languages.
 var audioTypes = [ { lang: "German", code: "de", voice: "de-DE_BirgitVoice" }, 
@@ -30,29 +31,59 @@ function textToSpeech(data){
 		console.error(error);
 	}
 	// Read selected input using selected voice.
-	function readInput(input, voice, successCallback, errorCallback) {
-		getToken(ttsCred, function (token) {
-			getAudioStream(token, input, voice, function (audio) {
+	function readInput(options, successCallback, errorCallback) {
+		options.cred = ttsCred;
+		// Get token for text-to-speech.
+		getToken(options, function (token) {
+			options.token = token;
+			// Get audio of text-to-speech conversion.
+			getAudioStream(options, function (audio) {
+				// Play audio.
 				var player = new Audio(window.URL.createObjectURL(audio));
 				player.play();
 			}, errorCallback);
 		}, errorCallback);
 	}
-	// Identify language and read input in that language.
-	function identifyAndReadInput(input, errorCallback) {
-		identifyLanguage(transCred, input, function (code) {
-			var foundVoice = audioTypes[1].voice;
-			// Check if supported by Text To Speech.
-			audioTypes.forEach(function(elem) {
-				if (elem.code === code) {
-					foundVoice = elem.voice;
-				}
-			});
-			readInput(input, foundVoice, errorCallback);
+	// Find language in supported languages and read input in that language.
+	function verifyAndReadInput(options, errorCallback) {
+		var foundVoice = audioTypes[1].voice;
+		// Check if language supported by Text To Speech.
+		audioTypes.forEach(function(elem) {
+			if (elem.code === options.srcLanguage) {
+				foundVoice = elem.voice;
+			}
+		});
+		options.voice = foundVoice;
+		readInput(options, errorCallback);
+	}
+	// Identify language and return it.
+	function identifyAndReadInput(options, successCallback, errorCallback) {
+		options.cred = transCred;
+		identifyLanguage(options, function (code) {
+			options.srcLanguage = code;
+			successCallback(options, errorCallback);
 		}, function (error) {
 			if (error === "NOT_FOUND") {
 				var foundVoice = audioTypes[1].voice;
-				readInput(input, foundVoice, errorCallback);
+				options.voice = foundVoice;
+				readInput(options, errorCallback);
+			}
+			else {
+				errorCallback(error);
+			}
+		});
+	}
+	// Translate input from given language to english and read input in english.
+	function translateAndReadInput(options, errorCallback) {
+		options.cred = transCred;
+		translateLanguage(options, function (newInput) {
+			var voice = audioTypes[1].voice;
+			options.input = newInput;
+			options.voice = voice;
+			readInput(options, errorCallback);
+		}, function (error) {
+			if (error === "NOT_FOUND") {
+				identifyAndReadInput(options, verifyAndReadInput, errorCallback);
 			}
 			else {
 				errorCallback(error);
@@ -61,48 +92,18 @@ function textToSpeech(data){
 	}
 	// Read input in text's language.
 	if (data.menuItemId === "tts_read") {
-		identifyAndReadInput(input, handleErr);
+		identifyAndReadInput({ input: input }, verifyAndReadInput, handleErr);
 	// Translate input to english and read it.
 	} else if (data.menuItemId === "tts_trans") {
-		identifyLanguage(transCred, input, function (code) {
-			translateLanguage(transCred, input, code, function (newInput) {
-				var voice = audioTypes[1].voice;
-				readInput(newInput, voice, handleErr);
-			}, function (error) {
-				if (error === "NOT_FOUND") {
-					identifyAndReadInput(input, handleErr);
-				}
-				else {
-					handleErr(error);
-				}
-			});
-		}, function (error) {
-			if (error === "NOT_FOUND") {
-				var voice = audioTypes[1].voice;
-				readInput(input, voice, handleErr);
-			}
-			else {
-				handleErr(error);
-			}
-		});
+		identifyAndReadInput({ input: input }, translateAndReadInput, handleErr);
 	// Translate input using given source language and then read it.
 	} else {
-		translateLanguage(transCred, input, srcLanguage, function (newInput) {
-			var voice = audioTypes[1].voice;
-			readInput(newInput, voice, handleErr);
-		}, function (error) {
-			if (error === "NOT_FOUND") {
-				identifyAndReadInput(input, handleErr);
-			}
-			else {
-				handleErr(error);
-			}
-		});
+		translateAndReadInput({ input: input, srcLanguage: srcLanguage }, handleErr);
 	}
 };
 
-function callWatsonAPI(options, uri, successCallback, errorCallback) {
-	fetch(uri, {
+function callWatsonAPI(options, successCallback, errorCallback) {
+	fetch(options.uri, {
 		method: options.method,
 		headers: {
 			"Authorization": "Basic " + options.cred,
@@ -131,29 +132,24 @@ function callWatsonAPI(options, uri, successCallback, errorCallback) {
 	});
 }
 
-function getToken(cred, successCallback, errorCallback) {
-	var uri = "https://" + apis.textToSpeech.tokenURI + "?url=" + "https://" + apis.textToSpeech.mainURI;
-	var options = {
-		method: "GET", 
-		reqType: "text/plain",
-		respType: "text/plain", 
-		cred: cred
-	};
-	callWatsonAPI(options, uri, successCallback, errorCallback);
+function getToken(options, successCallback, errorCallback) {
+	options.method = "GET";
+	options.reqType = "text/plain";
+	options.respType = "text/plain";
+	options.uri = "https://" + apis.textToSpeech.tokenURI + "?url=" + "https://" + apis.textToSpeech.mainURI;
+	delete options.body;
+	callWatsonAPI(options, successCallback, errorCallback);
 }
 
-function identifyLanguage(cred, input, successCallback, errorCallback) {
-	var uri = "https://" + apis.translate.mainURI + "identify";
+function identifyLanguage(options, successCallback, errorCallback) {
 	var formData = new FormData();
-	formData.append("data", input);
-	var options = {
-		method: "POST", 
-		reqType: "text/plain",
-		respType: "application/json", 
-		cred: cred,
-		body: formData
-	};
-	callWatsonAPI(options, uri, function (resp) {
+	formData.append("data", options.input);
+	options.method = "POST";
+	options.reqType = "text/plain";
+	options.respType = "application/json";
+	options.body = formData;
+	options.uri = "https://" + apis.translate.mainURI + "identify";
+	callWatsonAPI(options, function (resp) {
 		var languages = resp.languages;
 		// Languages found.
 		if (languages.length > 0) {
@@ -176,26 +172,24 @@ function identifyLanguage(cred, input, successCallback, errorCallback) {
 	}, errorCallback);
 }
 
-function translateLanguage(cred, input, src, successCallback, errorCallback) {
-	var uri = "https://" + apis.translate.mainURI + "translate";
+function translateLanguage(options, successCallback, errorCallback) {
+	var oldInput = options.input;
 	var jsonData = {
-		"text": input,
-		"source": src,
+		"text": oldInput,
+		"source": options.srcLanguage,
 		"target": "en"
 	}
-	var options = {
-		method: "POST", 
-		reqType: "application/json",
-		respType: "application/json", 
-		cred: cred,
-		body: JSON.stringify(jsonData)
-	};
-	callWatsonAPI(options, uri, function (resp) {
+	options.method = "POST";
+	options.reqType = "application/json",
+	options.respType = "application/json";
+	options.body = JSON.stringify(jsonData);
+	options.uri = "https://" + apis.translate.mainURI + "translate";
+	callWatsonAPI(options, function (resp) {
 		var translations = resp.translations;
 		// Translations found.
 		if (translations.length > 0) {
 			var newInput = translations[0].translation;
-			if (newInput !== input) {
+			if (newInput !== oldInput) {
 				successCallback(newInput);
 			}
 			else {
@@ -208,12 +202,11 @@ function translateLanguage(cred, input, src, successCallback, errorCallback) {
 	}, errorCallback);
 }
 
-function getAudioStream(token, input, voice, successCallback, errorCallback) {
+function getAudioStream(options, successCallback, errorCallback) {
 	var format = 'audio/ogg;codecs=opus';
+	var uri = "wss://" + apis.textToSpeech.mainURI + "/v1/synthesize?voice=" + options.voice + "&watson-token=" + options.token;
 
-	var wsURI = "wss://" + apis.textToSpeech.mainURI + "/v1/synthesize?voice=" + voice + "&watson-token=" + token;
-
-	var websocket = new WebSocket(wsURI);
+	var websocket = new WebSocket(uri);
 	websocket.onopen = onOpen;
 	websocket.onclose = onClose;
 	websocket.onmessage = onMessage;
@@ -221,7 +214,7 @@ function getAudioStream(token, input, voice, successCallback, errorCallback) {
 
 	function onOpen(evt) {
 	  var message = {
-		text: input,
+		text: options.input,
 		accept: format
 	  };
 	  websocket.send(JSON.stringify(message));

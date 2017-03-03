@@ -22,9 +22,11 @@ var audioTypes = [ { lang: "German", code: "de", voice: "de-DE_BirgitVoice" },
 				   { lang: "Japanese", code: "ja", voice: "ja-JP_EmiVoice" }, 
 				   { lang: "Portuguese", code: "pt", voice: "pt-BR_IsabelaVoice" }];
 
-function textToSpeech(data){
-	var input = data.selectionText;
-	var srcLanguage = data.menuItemId;
+function textToSpeech(data) {
+	var options = {
+		input: data.selectionText,
+		srcLanguage: data.menuItemId
+	};
 	var ttsCred = btoa(apis.textToSpeech.auth.username + ":" + apis.textToSpeech.auth.password);
 	var transCred = btoa(apis.translate.auth.username + ":" + apis.translate.auth.password);
 	function handleErr(error) {
@@ -92,13 +94,13 @@ function textToSpeech(data){
 	}
 	// Read input in text's language.
 	if (data.menuItemId === "tts_read") {
-		identifyAndReadInput({ input: input }, verifyAndReadInput, handleErr);
+		identifyAndReadInput(options, verifyAndReadInput, handleErr);
 	// Translate input to english and read it.
 	} else if (data.menuItemId === "tts_trans") {
-		identifyAndReadInput({ input: input }, translateAndReadInput, handleErr);
+		identifyAndReadInput(options, translateAndReadInput, handleErr);
 	// Translate input using given source language and then read it.
 	} else {
-		translateAndReadInput({ input: input, srcLanguage: srcLanguage }, handleErr);
+		translateAndReadInput(options, handleErr);
 	}
 };
 

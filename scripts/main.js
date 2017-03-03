@@ -101,17 +101,23 @@ function textToSpeech(data){
 	}
 };
 
-function getToken(cred, successCallback, errorCallback) {
-	var fetchURI = "https://" + apis.textToSpeech.tokenURI + "?url=" + "https://" + apis.textToSpeech.mainURI;
-	
-	fetch(fetchURI, {
-		method: "GET",
+function callWatsonAPI(options, uri, successCallback, errorCallback) {
+	fetch(uri, {
+		method: options.method,
 		headers: {
-			"Authorization": "Basic " + cred
-		}
+			"Authorization": "Basic " + options.cred,
+			"Content-Type" : options.reqType,
+			"Accept": options.respType
+		},
+		body: options.body
 	}).then(function (response) {
 		if (response.status === 200 || response.status === 206) {
-			response.text().then(successCallback);
+			if (options.respType === "application/json") {
+				response.json().then(successCallback);
+			}
+			else {
+				response.text().then(successCallback);
+			}
 		}
 		else if (response.status === 403) {
 			errorCallback("FORBIDDEN");
@@ -123,102 +129,83 @@ function getToken(cred, successCallback, errorCallback) {
 			errorCallback("FAILED");
 		}
 	});
+}
+
+function getToken(cred, successCallback, errorCallback) {
+	var uri = "https://" + apis.textToSpeech.tokenURI + "?url=" + "https://" + apis.textToSpeech.mainURI;
+	var options = {
+		method: "GET", 
+		reqType: "text/plain",
+		respType: "text/plain", 
+		cred: cred
+	};
+	callWatsonAPI(options, uri, successCallback, errorCallback);
 }
 
 function identifyLanguage(cred, input, successCallback, errorCallback) {
-	var fetchURI = "https://" + apis.translate.mainURI + "identify";
-	var form = new FormData();
-	form.append("data", input);
-	
-	fetch(fetchURI, {
-		method: "POST",
-		headers: {
-			"Authorization": "Basic " + cred,
-			"Content-Type" : "text/plain",
-			"Accept": "application/json"
-		},
-		body: form
-	}).then(function (response) {
-		if (response.status === 200 || response.status === 206) {
-			response.json().then(function (resp) {
-				var languages = resp.languages;
-				// Languages found.
-				if (languages.length > 0) {
-					var bestLang = languages[0];
-					var found = false;
-					// Check if found language passes confidence threshold.
-					if (bestLang.confidence >= confidenceThresh) {
-						// Check if supported by Text To Speech.
-						audioTypes.forEach(function(elem) {
-							if (elem.code === bestLang.language) {
-								successCallback(elem.code);
-								found = true;
-							}
-						});
+	var uri = "https://" + apis.translate.mainURI + "identify";
+	var formData = new FormData();
+	formData.append("data", input);
+	var options = {
+		method: "POST", 
+		reqType: "text/plain",
+		respType: "application/json", 
+		cred: cred,
+		body: formData
+	};
+	callWatsonAPI(options, uri, function (resp) {
+		var languages = resp.languages;
+		// Languages found.
+		if (languages.length > 0) {
+			var bestLang = languages[0];
+			var found = false;
+			// Check if found language passes confidence threshold.
+			if (bestLang.confidence >= confidenceThresh) {
+				// Check if supported by Text To Speech.
+				audioTypes.forEach(function(elem) {
+					if (elem.code === bestLang.language) {
+						successCallback(elem.code);
+						found = true;
 					}
-				}
-				if (!found) {
-					errorCallback("NOT_FOUND");
-				}
-			});
+				});
+			}
 		}
-		else if (response.status === 403) {
-			errorCallback("FORBIDDEN");
-		}
-		else if (response.status === 404) {
+		if (!found) {
 			errorCallback("NOT_FOUND");
 		}
-		else {
-			errorCallback("FAILED");
-		}
-	});
+	}, errorCallback);
 }
 
 function translateLanguage(cred, input, src, successCallback, errorCallback) {
-	var fetchURI = "https://" + apis.translate.mainURI + "translate";
-	var data = {
+	var uri = "https://" + apis.translate.mainURI + "translate";
+	var jsonData = {
 		"text": input,
 		"source": src,
 		"target": "en"
 	}
-	
-	fetch(fetchURI, {
-		method: "POST",
-		headers: {
-			"Authorization": "Basic " + cred,
-			"Content-Type" : "application/json",
-			"Accept": "application/json"
-		},
-		body: JSON.stringify(data)
-	}).then(function (response) {
-		if (response.status === 200 || response.status === 206) {
-			response.json().then(function (resp) {
-				var translations = resp.translations;
-				// Translations found.
-				if (translations.length > 0) {
-					var newInput = translations[0].translation;
-					if (newInput !== input) {
-						successCallback(newInput);
-					}
-					else {
-						errorCallback("NOT_FOUND");
-					}
-				}
-				else {
-					errorCallback("NOT_FOUND");
-				}
-			});
-		}
-		else if (response.status === 403) {
-			errorCallback("FORBIDDEN");
-		}
-		else if (response.status === 404) {
-			errorCallback("NOT_FOUND");
+	var options = {
+		method: "POST", 
+		reqType: "application/json",
+		respType: "application/json", 
+		cred: cred,
+		body: JSON.stringify(jsonData)
+	};
+	callWatsonAPI(options, uri, function (resp) {
+		var translations = resp.translations;
+		// Translations found.
+		if (translations.length > 0) {
+			var newInput = translations[0].translation;
+			if (newInput !== input) {
+				successCallback(newInput);
+			}
+			else {
+				errorCallback("NOT_FOUND");
+			}
 		}
 		else {
-			errorCallback("FAILED");
+			errorCallback("NOT_FOUND");
 		}
-	});
+	}, errorCallback);
 }
 
 function getAudioStream(token, input, voice, successCallback, errorCallback) {
@@ -290,4 +277,3 @@ audioTypes.forEach(function (elem, index) {
 		});
 	}
 });
-

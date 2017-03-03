@@ -1,7 +1,7 @@
 var apis = {
 			  textToSpeech: {
 				// Enter your Watson Text To Speech API credentials here.
-			    auth: { username: "{user-name}", password: "{password}" },
+			        auth: { username: "{user-name}", password: "{password}" },
 				tokenURI: "stream.watsonplatform.net/authorization/api/v1/token",
 				mainURI: "stream.watsonplatform.net/text-to-speech/api"
 			  },
@@ -145,7 +145,6 @@ function identifyLanguage(cred, input, successCallback, errorCallback) {
 				// Languages found.
 				if (languages.length > 0) {
 					var bestLang = languages[0];
-					console.dir(bestLang);
 					var found = false;
 					// Check if found language passes confidence threshold.
 					if (bestLang.confidence >= confidenceThresh) {
